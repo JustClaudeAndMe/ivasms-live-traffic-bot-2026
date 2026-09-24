@@ -1,3 +1,22 @@
+import os
+from threading import Thread
+from flask import Flask
+
+app = Flask("")
+
+
+@app.route("/")
+def home():
+    return "Bot is running!"
+
+
+def run():
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
+
+
+# Background thread me Flask app ko start karo
+Thread(target=run).start()
 import time
 import requests
 import json
