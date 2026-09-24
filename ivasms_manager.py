@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-ivasms_manager.py - وحدة إدارة ومزامنة أرقام iVasms تلقائياً
+ivasms_manager.py - Automatic iVasms numbers management and synchronization module
 ================================================================================
-موديول مستقل يوفر:
-1. مزامنة وسحب أرقام الحساب وتخزينها في قاعدة بيانات البوت (combos).
-2. البحث في مستودع الموقع العالمي عن الدول المتاحة وأسعارها وإضافة نطاقات جديدة.
-3. إرجاع وحذف الأرقام المنتهية من الموقع وقاعدة بيانات البوت.
-4. فحص الجلسة والكوكيز واستخراج رمز الأمان CSRF تلقائياً.
+Standalone module that provides:
+1. Sync and pull account numbers and store them in the bot database (combos).
+2. Search the site's global repository for available countries and prices, and add new ranges.
+3. Return and delete exhausted numbers from the site and the bot database.
+4. Check the session and cookies and extract the CSRF security token automatically.
 """
 
 import os
@@ -23,8 +23,9 @@ BASE_URL = "https://www.ivasms.com"
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot1.db")
 COOKIES_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mafia_ck_4235.json")
 
+
 def find_latest_cookie_txt():
-    """البحث عن أحدث ملف كوكيز تم تحميله"""
+    """Find the most recently downloaded cookie file"""
     import glob
     download_dir = os.path.join(os.path.expanduser("~"), "Downloads")
     candidates = glob.glob(os.path.join(download_dir, "*cookie*.txt")) if os.path.isdir(download_dir) else []
@@ -35,16 +36,18 @@ def find_latest_cookie_txt():
     candidates.sort(key=os.path.getmtime, reverse=True)
     return candidates[0]
 
+
 COOKIES_TXT = find_latest_cookie_txt()
 
-# استيراد خريطة الدول والدوال الذكية من country_data
+# Import country map and smart helpers from country_data
 from country_data import COUNTRY_CODES, get_country_details_smart, get_app_badge, get_service_display
 
-# للتوافقية السابقة
+# Backward compatibility
 COUNTRY_CODES_MAP = {k: (v[0], v[1]) for k, v in COUNTRY_CODES.items()}
 
+
 def get_session():
-    """إنشاء جلسة requests متطابقة تماماً مع متصفح Chrome وتعيين الكوكيز"""
+    """Create a requests session that exactly matches a Chrome browser and set the cookies"""
     session = requests.Session()
     hdrs = {
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
@@ -73,7 +76,7 @@ def get_session():
     hdrs['X-Requested-With'] = 'XMLHttpRequest'
     session.headers.update(hdrs)
 
-    # 1. فحص أحدث ملف كوكيز نصي تم تحميله في مجلد التنزيلات
+    # 1. Check the most recently downloaded cookie text file in the Downloads folder
     latest_txt = find_latest_cookie_txt()
     if latest_txt and os.path.exists(latest_txt):
         try:
@@ -95,7 +98,7 @@ def get_session():
         except Exception:
             pass
 
-    # 2. فحص ملف JSON
+    # 2. Check the JSON file
     if os.path.exists(COOKIES_JSON):
         try:
             with open(COOKIES_JSON, 'r', encoding='utf-8') as f:
@@ -111,8 +114,9 @@ def get_session():
 
     return None
 
+
 def get_csrf_token(session=None):
-    """استخراج رمز الـ CSRF Token من صفحة اللوحة"""
+    """Extract the CSRF Token from the dashboard page"""
     if session is None:
         session = get_session()
     if not session:
@@ -131,13 +135,14 @@ def get_csrf_token(session=None):
         pass
     return None
 
+
 def check_ivasms_status():
-    """فحص حالة الاتصال والحساب، وإرجاع تقرير مختصر"""
+    """Check the connection and account status and return a brief report"""
     session = get_session()
     if not session:
         return {
             'ok': False,
-            'message': '❌ تعذر العثور على ملف الكوكيز.'
+            'message': '❌ Could not find the cookies file.'
         }
     try:
         ajax_headers = {
@@ -146,47 +151,48 @@ def check_ivasms_status():
         }
         r = session.get(f"{BASE_URL}/portal/numbers", params={'draw': 1, 'start': 0, 'length': 1}, headers=ajax_headers, timeout=20)
         if r.status_code == 403:
-            return {'ok': False, 'message': '❌ الكوكيز منتهية الصلاحية (403 Cloudflare).'}
+            return {'ok': False, 'message': '❌ Cookies are expired (403 Cloudflare).'}
         if "login" in r.url.lower():
-            return {'ok': False, 'message': '⚠️ تم التحويل لصفحة تسجيل الدخول (الجلسة منتهية).'}
+            return {'ok': False, 'message': '⚠️ Redirected to login page (session expired).'}
         if r.status_code == 200:
             try:
                 data = r.json()
             except Exception:
                 if "login" in r.text.lower():
-                    return {'ok': False, 'message': '⚠️ تم التحويل لصفحة تسجيل الدخول.'}
-                return {'ok': False, 'message': '❌ استجابة غير صالحة من الموقع (تأكد من تجديد الكوكيز).'}
+                    return {'ok': False, 'message': '⚠️ Redirected to login page.'}
+                return {'ok': False, 'message': '❌ Invalid response from the site (make sure to renew cookies).'}
             total_my_numbers = data.get('recordsTotal', 0)
             return {
                 'ok': True,
                 'status_code': 200,
                 'my_numbers_count': total_my_numbers,
-                'message': f'🟢 الاتصال نشط | لديك {total_my_numbers} رقم في الحساب.'
+                'message': f'🟢 Connection active | You have {total_my_numbers} numbers in your account.'
             }
-        return {'ok': False, 'message': f'❌ استجابة غير متوقعة: {r.status_code}'}
+        return {'ok': False, 'message': f'❌ Unexpected response: {r.status_code}'}
     except Exception as e:
-        return {'ok': False, 'message': f'❌ خطأ في الاتصال: {str(e)}'}
+        return {'ok': False, 'message': f'❌ Connection error: {str(e)}'}
+
 
 def get_all_my_numbers():
-    """جلب قائمة بجميع الأرقام المضافة حالياً في حسابك على iVasms"""
+    """Fetch a list of all numbers currently added to your iVasms account"""
     session = get_session()
     if not session:
-        return False, "❌ لا توجد جلسة نشطة.", []
+        return False, "❌ No active session.", []
 
     try:
         ajax_headers = {
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json, text/javascript, */*; q=0.01'
         }
-        # جلب أول 500 رقم
+        # Fetch the first 500 numbers
         r = session.get(f"{BASE_URL}/portal/numbers", params={'draw': 1, 'start': 0, 'length': 500}, headers=ajax_headers, timeout=25)
         if r.status_code != 200:
-            return False, f"رمز الاستجابة: {r.status_code}", []
+            return False, f"Response code: {r.status_code}", []
 
         try:
             data = r.json()
         except Exception:
-            return False, "تعذر قراءة بيانات الأرقام من الموقع (استجابة غير صالحة).", []
+            return False, "Could not read the numbers data from the site (invalid response).", []
 
         raw_list = data.get('data', [])
         clean_numbers = []
@@ -196,7 +202,7 @@ def get_all_my_numbers():
             num_clean = re.sub(r'<[^>]+>', '', str(num_val)).strip().lstrip('+')
             range_name = item.get('range') or item.get('range_name') or ''
             rate = item.get('A2P') or item.get('rate') or ''
-            
+
             num_id = item.get('id') or ''
             if not num_id and 'number_id' in item:
                 m = re.search(r'value=["\'](\d+)["\']', str(item.get('number_id')))
@@ -211,20 +217,21 @@ def get_all_my_numbers():
                     'rate': rate
                 })
 
-        return True, "تم الجلب بنجاح", clean_numbers
+        return True, "Fetched successfully", clean_numbers
     except Exception as e:
-        return False, f"خطأ: {str(e)}", []
+        return False, f"Error: {str(e)}", []
+
 
 def sync_numbers_to_bot_combos(default_service="All Apps"):
-    """سحب جميع الأرقام من iVasms وإضافتها مباشرة إلى جدول combos في bot1.db مع ربط التطبيق"""
+    """Pull all numbers from iVasms and add them directly to the combos table in bot1.db, linking the app"""
     ok, msg, numbers_list = get_all_my_numbers()
     if not ok:
         return False, msg, {}
 
     if not numbers_list:
-        return True, "حسابك لا يحتوي على أي أرقام حالياً لسحبها.", {}
+        return True, "Your account has no numbers to pull right now.", {}
 
-    # تصنيف الأرقام حسب كود الدولة باستخدام get_country_details_smart
+    # Classify numbers by country code using get_country_details_smart
     grouped = {}
     for item in numbers_list:
         num = item['number']
@@ -236,7 +243,7 @@ def sync_numbers_to_bot_combos(default_service="All Apps"):
         if num not in grouped[c_code]['numbers']:
             grouped[c_code]['numbers'].append(num)
 
-    # حفظ الأرقام في bot1.db
+    # Save the numbers into bot1.db
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -244,7 +251,7 @@ def sync_numbers_to_bot_combos(default_service="All Apps"):
 
         for c_code, info in grouped.items():
             nums = info['numbers']
-            # البحث عن أقصى combo_index
+            # Find the maximum combo_index
             c.execute("SELECT MAX(combo_index) FROM combos WHERE country_code=?", (c_code,))
             res = c.fetchone()[0]
             next_index = 1 if res is None else res + 1
@@ -256,19 +263,20 @@ def sync_numbers_to_bot_combos(default_service="All Apps"):
 
         conn.commit()
         conn.close()
-        return True, f"✅ تم سحب {len(numbers_list)} رقماً وتخزينها بنجاح!", saved_summary
+        return True, f"✅ Pulled and stored {len(numbers_list)} numbers successfully!", saved_summary
     except Exception as e:
-        return False, f"❌ خطأ أثناء الحفظ في قاعدة البيانات: {str(e)}", {}
+        return False, f"❌ Error while saving to the database: {str(e)}", {}
+
 
 def search_test_numbers(country_query, limit=10):
-    """البحث في مستودع الأرقام العالمي عن دولة أو نطاق معين"""
+    """Search the global numbers repository for a specific country or range"""
     session = get_session()
     if not session:
-        return False, "❌ لا توجد جلسة نشطة.", []
+        return False, "❌ No active session.", []
 
     query = str(country_query).strip().lstrip('+')
     try:
-        # البحث باستخدام DataTables search
+        # Search using DataTables search
         params = {
             'draw': 1,
             'start': 0,
@@ -277,7 +285,7 @@ def search_test_numbers(country_query, limit=10):
         }
         r = session.get(f"{BASE_URL}/portal/numbers/test", params=params, timeout=25)
         if r.status_code != 200:
-            return False, f"رمز الاستجابة: {r.status_code}", []
+            return False, f"Response code: {r.status_code}", []
 
         data = r.json()
         records = data.get('data', [])
@@ -290,7 +298,7 @@ def search_test_numbers(country_query, limit=10):
             term = row.get('term', '')
             row_id = row.get('id', '')
 
-            # فلترة النتائج للتأكد من تطابق الاستعلام
+            # Filter the results to ensure they match the query
             if query.lower() in range_name.lower() or query in test_num or query in str(row_id):
                 results.append({
                     'id': row_id,
@@ -300,7 +308,7 @@ def search_test_numbers(country_query, limit=10):
                     'term': term
                 })
 
-        # إذا كانت الفلترة الصارمة فارغة، أعد السجلات كما أرجعها السيرفر
+        # If strict filtering returns nothing, return the records as the server returned them
         if not results and records:
             for row in records[:limit]:
                 results.append({
@@ -311,19 +319,20 @@ def search_test_numbers(country_query, limit=10):
                     'term': row.get('term')
                 })
 
-        return True, f"تم العثور على {len(results)} نطاقاً متاحاً.", results
+        return True, f"Found {len(results)} available ranges.", results
     except Exception as e:
-        return False, f"❌ خطأ في البحث: {str(e)}", []
+        return False, f"❌ Search error: {str(e)}", []
+
 
 def add_range_to_account(range_id):
-    """إضافة نطاق أرقام إلى حسابك في iVasms برمجياً بنقرة واحدة"""
+    """Add a numbers range to your iVasms account programmatically with one click"""
     session = get_session()
     if not session:
-        return False, "❌ لا توجد جلسة نشطة."
+        return False, "❌ No active session."
 
     csrf = get_csrf_token(session)
     if not csrf:
-        return False, "❌ تعذر استخراج رمز CSRF Token."
+        return False, "❌ Could not extract the CSRF Token."
 
     url = f"{BASE_URL}/portal/numbers/termination/number/add"
     payload = {
@@ -341,22 +350,23 @@ def add_range_to_account(range_id):
         resp = session.post(url, data=payload, headers=headers, timeout=25)
         if resp.status_code == 200:
             res_json = resp.json()
-            msg = res_json.get('message', 'تمت إضافة الأرقام بنجاح!')
+            msg = res_json.get('message', 'Numbers added successfully!')
             return True, msg
         else:
-            return False, f"فشل الطلب برمز: {resp.status_code}"
+            return False, f"Request failed with code: {resp.status_code}"
     except Exception as e:
-        return False, f"خطأ أثناء الإضافة: {str(e)}"
+        return False, f"Error while adding: {str(e)}"
+
 
 def return_all_numbers_from_system():
-    """إرجاع كافة الأرقام وحذفها من حساب iVasms ومن قاعدة بيانات البوت"""
+    """Return all numbers and delete them from the iVasms account and the bot database"""
     session = get_session()
     if not session:
-        return False, "❌ لا توجد جلسة نشطة."
+        return False, "❌ No active session."
 
     csrf = get_csrf_token(session)
     if not csrf:
-        return False, "❌ تعذر استخراج رمز CSRF Token."
+        return False, "❌ Could not extract the CSRF Token."
 
     url = f"{BASE_URL}/portal/numbers/return/allnumber/bluck"
     payload = {'_token': csrf}
@@ -370,7 +380,7 @@ def return_all_numbers_from_system():
     try:
         resp = session.post(url, data=payload, headers=headers, timeout=30)
         if resp.status_code == 200:
-            # تفريغ جدول combos في البوت
+            # Empty the combos table in the bot
             try:
                 conn = sqlite3.connect(DB_PATH)
                 c = conn.cursor()
@@ -379,20 +389,21 @@ def return_all_numbers_from_system():
                 conn.close()
             except Exception:
                 pass
-            return True, "✅ تم إرجاع جميع الأرقام للنظام وتفريغ الكومبو بالكامل!"
-        return False, f"فشل الإرجاع (رمز: {resp.status_code})"
+            return True, "✅ All numbers were returned to the system and the combos were fully cleared!"
+        return False, f"Return failed (code: {resp.status_code})"
     except Exception as e:
-        return False, f"❌ خطأ أثناء الإرجاع: {str(e)}"
+        return False, f"❌ Error while returning: {str(e)}"
+
 
 def return_single_number_from_system(number_id):
-    """إرجاع رقم واحد محدد للنظام"""
+    """Return a single specific number to the system"""
     session = get_session()
     if not session:
-        return False, "❌ لا توجد جلسة نشطة."
+        return False, "❌ No active session."
 
     csrf = get_csrf_token(session)
     if not csrf:
-        return False, "❌ تعذر استخراج رمز CSRF Token."
+        return False, "❌ Could not extract the CSRF Token."
 
     url = f"{BASE_URL}/portal/numbers/return/number/bluck"
     payload = {
@@ -409,31 +420,33 @@ def return_single_number_from_system(number_id):
     try:
         resp = session.post(url, data=payload, headers=headers, timeout=25)
         if resp.status_code == 200:
-            return True, "✅ تم إرجاع الرقم للنظام بنجاح."
-        return False, f"فشل الإرجاع (رمز: {resp.status_code})"
+            return True, "✅ Number returned to the system successfully."
+        return False, f"Return failed (code: {resp.status_code})"
     except Exception as e:
-        return False, f"❌ خطأ: {str(e)}"
+        return False, f"❌ Error: {str(e)}"
+
 
 def get_top_terminations():
-    """جلب أكثر النطاقات الشغالة حالياً في لوحة التحكم (Top Ranges)"""
+    """Fetch the currently most active ranges on the dashboard (Top Ranges)"""
     session = get_session()
     if not session:
-        return False, "❌ لا توجد جلسة نشطة.", []
+        return False, "❌ No active session.", []
     try:
         r = session.get(f"{BASE_URL}/portal/top_terminations", timeout=20)
         if r.status_code == 200:
             data = r.json()
             items = data.get('data', [])
-            return True, f"تم العثور على {len(items)} نطاقاً نشطاً.", items
-        return False, f"رمز الاستجابة: {r.status_code}", []
+            return True, f"Found {len(items)} active ranges.", items
+        return False, f"Response code: {r.status_code}", []
     except Exception as e:
-        return False, f"خطأ: {str(e)}", []
+        return False, f"Error: {str(e)}", []
+
 
 def get_top_ranges_by_app(app_name, limit=25):
-    """جلب النطاقات والدول التي تستقبل رسائل حالياً لتطبيق معين (WhatsApp, TikTok, إلخ) مع تفاصيل الدولة الذكية"""
+    """Fetch ranges and countries currently receiving messages for a specific app (WhatsApp, TikTok, etc.) with smart country details"""
     session = get_session()
     if not session:
-        return False, "❌ لا توجد جلسة نشطة.", []
+        return False, "❌ No active session.", []
     try:
         r = session.get(
             f"{BASE_URL}/portal/sms/test/sms",
@@ -448,7 +461,7 @@ def get_top_ranges_by_app(app_name, limit=25):
                 range_name = str(row.get('range') or '').strip()
                 term_id = row.get('termination_id', '')
                 time_str = str(row.get('senttime') or '')
-                
+
                 term_obj = row.get('termination') or {}
                 test_num_raw = term_obj.get('test_number', '')
                 test_number = re.sub(r'<[^>]+>', '', str(test_num_raw)).strip().lstrip('+')
@@ -456,7 +469,7 @@ def get_top_ranges_by_app(app_name, limit=25):
                 if range_name and range_name not in active_ranges:
                     c_code, c_name, flag, short = get_country_details_smart(test_number, range_name)
                     time_display = time_str.split()[-1] if time_str else ''
-                    
+
                     active_ranges[range_name] = {
                         'range': range_name,
                         'id': term_id,
@@ -470,31 +483,32 @@ def get_top_ranges_by_app(app_name, limit=25):
                         'app': app_name
                     }
             results = list(active_ranges.values())
-            return True, f"تم العثور على {len(results)} نطاقاً نشطاً لـ {app_name}.", results
-        return False, f"رمز الاستجابة: {r.status_code}", []
+            return True, f"Found {len(results)} active ranges for {app_name}.", results
+        return False, f"Response code: {r.status_code}", []
     except Exception as e:
-        return False, f"خطأ: {str(e)}", []
+        return False, f"Error: {str(e)}", []
+
 
 def add_range_and_sync_to_bot(range_id, app_name='WhatsApp', range_name=''):
-    """تفعيل النطاق في موقع iVasms وسحب أرقامه فوراً وحفظها في البوت مع ربط التطبيق وحجم الأرقام"""
+    """Activate the range on iVasms, pull its numbers instantly, and save them in the bot with the app and number count"""
     session = get_session()
     if not session:
-        return False, "❌ لا توجد جلسة نشطة لموقع iVasms.", {}
+        return False, "❌ No active session for iVasms.", {}
 
-    # 1. تفعيل النطاق بالموقع
+    # 1. Activate the range on the site
     ok, msg = add_range_to_account(range_id)
     if not ok:
-        return False, f"❌ فشل تفعيل النطاق في الموقع: {msg}", {}
+        return False, f"❌ Failed to activate the range on the site: {msg}", {}
 
     import time
     time.sleep(1.5)
 
-    # 2. جلب أرقام الحساب
+    # 2. Fetch the account numbers
     ok_nums, msg_nums, all_nums = get_all_my_numbers()
     if not ok_nums or not all_nums:
-        return False, f"⚠️ تم تفعيل النطاق لكن تعذر جلب الأرقام فوراً: {msg_nums}", {}
+        return False, f"⚠️ Range activated but could not fetch numbers immediately: {msg_nums}", {}
 
-    # 3. تصفية أرقام النطاق المستهدف
+    # 3. Filter numbers for the target range
     matched = []
     if range_name:
         matched = [x for x in all_nums if str(x.get('range_name', '')).strip().lower() == range_name.strip().lower()]
@@ -504,12 +518,12 @@ def add_range_and_sync_to_bot(range_id, app_name='WhatsApp', range_name=''):
 
     num_strings = [x['number'] for x in matched]
     if not num_strings:
-        return False, "⚠️ لم يتم العثور على أرقام جديدة في حسابك.", {}
+        return False, "⚠️ No new numbers were found in your account.", {}
 
     sample_num = num_strings[0]
     c_code, c_name, flag, short = get_country_details_smart(sample_num, range_name)
 
-    # 4. حفظ الكومبو في قاعدة بيانات البوت
+    # 4. Save the combo into the bot database
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -534,13 +548,14 @@ def add_range_and_sync_to_bot(range_id, app_name='WhatsApp', range_name=''):
             'range_name': range_name or f"{c_name} Range",
             'sample_number': sample_num
         }
-        return True, f"✅ تم تفعيل وسحب نطاق {summary['range_name']} ({len(num_strings)} رقم) بنجاح!", summary
+        return True, f"✅ Activated and pulled range {summary['range_name']} ({len(num_strings)} numbers) successfully!", summary
     except Exception as e:
-        return False, f"❌ خطأ في حفظ الكومبو بالبوت: {str(e)}", {}
+        return False, f"❌ Error saving the combo in the bot: {str(e)}", {}
+
 
 def fetch_live_stream_messages(limit=25):
     """
-    سحب الرسائل الحية المباشرة من موقع iVasms التي يستقبلها الموقع لحظة بلحظة لجميع التطبيقات
+    Pull live messages directly from iVasms that the site is receiving moment by moment for all apps
     """
     session = get_session()
     if not session:
