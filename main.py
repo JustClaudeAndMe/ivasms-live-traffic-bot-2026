@@ -20,6 +20,7 @@ Thread(target=run).start()
 
 import time
 import requests
+from curl_cffi import requests as curl_requests
 import json
 import re
 import os
