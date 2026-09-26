@@ -16,6 +16,7 @@ import re
 import json
 import sqlite3
 import requests
+from curl_cffi import requests as curl_requests  # ✅ FIX 1: curl_cffi imported
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -47,8 +48,9 @@ COUNTRY_CODES_MAP = {k: (v[0], v[1]) for k, v in COUNTRY_CODES.items()}
 
 
 def get_session():
-    """Create a requests session that exactly matches a Chrome browser and set the cookies"""
-    session = requests.Session()
+    """Create a curl_cffi session that impersonates Chrome's exact TLS fingerprint and set the cookies"""
+    # ✅ FIX 2: Use curl_cffi session with Chrome impersonation
+    session = curl_requests.Session(impersonate="chrome")
     hdrs = {
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
