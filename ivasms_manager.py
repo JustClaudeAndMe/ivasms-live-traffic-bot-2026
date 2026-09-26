@@ -51,6 +51,18 @@ def get_session():
     """Create a curl_cffi session that impersonates Chrome's exact TLS fingerprint and set the cookies"""
     # ✅ FIX 2: Use curl_cffi session with Chrome impersonation
     session = curl_requests.Session(impersonate="chrome")
+
+    # ✅ PROXY INTEGRATION: Read proxy from .env and apply to session
+    proxy_url = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+    if proxy_url:
+        session.proxies = {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+        # Print only the host part for safety (never log credentials)
+        safe_proxy = proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url
+        print(f"[Proxy] Using proxy: {safe_proxy}")
+
     hdrs = {
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
