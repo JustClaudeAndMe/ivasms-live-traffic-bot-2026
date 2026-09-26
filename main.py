@@ -92,8 +92,10 @@ def get_active_headers():
 
 # ✅ PROXY INTEGRATION: helper functions to attach the .env proxy to any session
 def get_proxy_url():
-    """Return the configured proxy URL from .env, or None if not set."""
-    return os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+    """Return the configured iVasms proxy URL from .env, or None if not set.
+    Note: We intentionally use a custom env var name (IVASMS_PROXY) so that
+    Python's requests/urllib3/telebot do NOT auto-pick the proxy for Telegram API calls."""
+    return os.getenv("IVASMS_PROXY")
 
 def apply_proxy_to_session(session):
     """Attach the proxy from .env to the given curl_cffi session."""
