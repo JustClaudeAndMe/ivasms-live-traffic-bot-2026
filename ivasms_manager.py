@@ -53,7 +53,8 @@ def get_session():
     session = curl_requests.Session(impersonate="chrome")
 
     # ✅ PROXY INTEGRATION: Read proxy from .env and apply to session
-    proxy_url = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+        # ✅ PROXY INTEGRATION: Read the iVasms-only proxy from .env
+    proxy_url = os.getenv("IVASMS_PROXY")
     if proxy_url:
         session.proxies = {
             "http": proxy_url,
