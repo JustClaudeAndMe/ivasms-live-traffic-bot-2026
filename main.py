@@ -20,7 +20,7 @@ Thread(target=run).start()
 
 import time
 import requests
-from curl_cffi import requests as curl_requests
+from curl_cffi import requests as curl_requests  # ✅ FIX 1: curl_cffi imported
 import json
 import re
 import os
@@ -260,7 +260,8 @@ def verify_and_test_cookies(cookies_list, preferred_ua=None):
         })
 
     for profile in profiles_to_test:
-        test_session = requests.Session()
+        # ✅ FIX 2: Use curl_cffi for the test session
+        test_session = curl_requests.Session(impersonate="chrome")
         hdrs = {
             'User-Agent': profile['ua'],
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -329,10 +330,9 @@ def verify_and_test_cookies(cookies_list, preferred_ua=None):
             else:
                 return True, f"Logged in successfully via ({profile['name']}) and extracted CSRF (SMS gateway code: {api_resp.status_code}).", csrf_token, hdrs
 
-        except requests.exceptions.RequestException as e:
-            last_err = f"Error connecting to the site: {str(e)}"
+        # ✅ FIX 3: Broad exception catch (curl_cffi has its own exception classes)
         except Exception as e:
-            last_err = f"Unexpected error occurred: {str(e)}"
+            last_err = f"Connection error: {str(e)}"
 
     if had_403:
         err_msg = (
@@ -445,7 +445,8 @@ IVASMS_DASHBOARD = {
     "sms_api_endpoint": "https://www.ivasms.com/portal/sms/received/getsms",
     "username": USERNAME,
     "password": PASSWORD,
-    "session": requests.Session(),
+    # ✅ FIX 4: Use curl_cffi session with Chrome impersonation
+    "session": curl_requests.Session(impersonate="chrome"),
     "is_logged_in": False,
     "cookies": None,
     "csrf_token": None,
@@ -2507,8 +2508,12 @@ def login_to_ivasms():
         session.headers.update(get_active_headers())
         session.cookies.clear()
 
-        # User's saved cookies
-        cookies_to_use = saved if saved else default_cookies
+        # ✅ FIX 5: Removed undefined `default_cookies` — bail out if no cookies
+        if not saved:
+            print(f"[{dash['name']}] ❌ No cookies found — cannot login.")
+            dash['is_logged_in'] = False
+            return False
+        cookies_to_use = saved
         if isinstance(cookies_to_use, list):
             for c in cookies_to_use:
                 domain = c.get('domain', 'www.ivasms.com').lstrip('.')
@@ -3251,9 +3256,10 @@ def main_loop():
                         print(f"[{dash['name']}] 🔄 Retrying login...")
                         threading.Thread(target=login_to_ivasms, daemon=True).start()
 
-                # Cleanup memory
+                # ✅ FIX 6: Fixed set/dict bug — keep as dict when trimming
                 if len(sent_messages) > 2000:
-                    sent_messages = set(list(sent_messages)[-1000:])
+                    keys = list(sent_messages)[-1000:]
+                    sent_messages = {k: sent_messages[k] for k in keys}
 
             except Exception as e:
                 consecutive_errors[dash["name"]] += 1
@@ -3702,7 +3708,8 @@ def handle_test_old_pull_date(message):
                     bot.reply_to(message, err_text)
                 return
 
-            session = requests.Session()
+            # ✅ FIX 7: Use curl_cffi for the historical pull session
+            session = curl_requests.Session(impersonate="chrome")
             session.headers.update({
                 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -4403,6 +4410,12 @@ def admin_do_set_svc_callback(call):
 # ======================
 def run_bot():
     print("[*] Starting bot...")
+    # ✅ FIX 8: Clear any stale Telegram webhook before polling
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        print("[*] Webhook cleared. Using long polling.")
+    except Exception as e:
+        print(f"[!] delete_webhook failed: {e}")
     while True:
         try:
             bot.polling(none_stop=True, timeout=30)
