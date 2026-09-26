@@ -1,5 +1,4 @@
 import os
-import os
 
 # ✅ CRITICAL FIX: Remove any inherited proxy env vars so requests/telebot
 # do NOT route Telegram API calls through the proxy. Only our custom code
