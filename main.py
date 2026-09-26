@@ -1,4 +1,12 @@
 import os
+import os
+
+# ✅ CRITICAL FIX: Remove any inherited proxy env vars so requests/telebot
+# do NOT route Telegram API calls through the proxy. Only our custom code
+# reads IVASMS_PROXY explicitly for iVasms.
+for _proxy_var in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
+    os.environ.pop(_proxy_var, None)
+
 from threading import Thread
 from flask import Flask
 
