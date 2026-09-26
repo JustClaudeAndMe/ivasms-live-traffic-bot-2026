@@ -89,6 +89,25 @@ def get_active_headers():
             pass
     return hdrs
 
+
+# ✅ PROXY INTEGRATION: helper functions to attach the .env proxy to any session
+def get_proxy_url():
+    """Return the configured proxy URL from .env, or None if not set."""
+    return os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+
+def apply_proxy_to_session(session):
+    """Attach the proxy from .env to the given curl_cffi session."""
+    proxy_url = get_proxy_url()
+    if proxy_url:
+        session.proxies = {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+        safe = proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url
+        print(f"[Proxy] Session using proxy: {safe}")
+    return session
+
+
 def save_cookies_to_file(cookies_dict):
     with open(COOKIES_FILE, 'w', encoding='utf-8') as f:
         json.dump(cookies_dict, f, ensure_ascii=False, indent=2)
@@ -260,8 +279,9 @@ def verify_and_test_cookies(cookies_list, preferred_ua=None):
         })
 
     for profile in profiles_to_test:
-        # ✅ FIX 2: Use curl_cffi for the test session
+        # ✅ FIX 2 + PROXY: Use curl_cffi for the test session and attach proxy
         test_session = curl_requests.Session(impersonate="chrome")
+        apply_proxy_to_session(test_session)
         hdrs = {
             'User-Agent': profile['ua'],
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -437,6 +457,10 @@ BOT_ACTIVE = True
 # ======================
 # 🖥️ The single dashboard setup (iVasms)
 # ======================
+# ✅ PROXY INTEGRATION: Create the session and attach the proxy from .env
+_ivasms_session = curl_requests.Session(impersonate="chrome")
+apply_proxy_to_session(_ivasms_session)
+
 IVASMS_DASHBOARD = {
     "name": "iVasms",
     "type": "ivasms",
@@ -445,8 +469,7 @@ IVASMS_DASHBOARD = {
     "sms_api_endpoint": "https://www.ivasms.com/portal/sms/received/getsms",
     "username": USERNAME,
     "password": PASSWORD,
-    # ✅ FIX 4: Use curl_cffi session with Chrome impersonation
-    "session": curl_requests.Session(impersonate="chrome"),
+    "session": _ivasms_session,
     "is_logged_in": False,
     "cookies": None,
     "csrf_token": None,
@@ -3708,8 +3731,9 @@ def handle_test_old_pull_date(message):
                     bot.reply_to(message, err_text)
                 return
 
-            # ✅ FIX 7: Use curl_cffi for the historical pull session
+            # ✅ FIX 7 + PROXY: Use curl_cffi for the historical pull and attach proxy
             session = curl_requests.Session(impersonate="chrome")
+            apply_proxy_to_session(session)
             session.headers.update({
                 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
